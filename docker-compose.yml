@@ -1,0 +1,32 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://tafseel:tafseel@db:5432/tafseel
+      SECRET_KEY: ${SECRET_KEY:-local-dev-only-change-me}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: http://localhost:8000
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tafseel
+      POSTGRES_PASSWORD: tafseel
+      POSTGRES_DB: tafseel
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tafseel -d tafseel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:
