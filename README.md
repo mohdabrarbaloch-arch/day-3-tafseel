@@ -66,12 +66,16 @@ Length stops being the limit.
 
 ## Screenshots
 
+Captured from a real local run: three documents loaded, one question asked, 84% compression.
+
 | Vault + composer | Reasoning trace |
 |---|---|
-| ![Vault](docs/screenshots/vault.png) | ![Trace](docs/screenshots/trace.png) |
+| ![Vault](https://static.teamily.ai/sites/a36062a5-94f0-4879-bbed-66b664fb5f06/documents/vault/vault.png) | ![Trace](https://static.teamily.ai/sites/a36062a5-94f0-4879-bbed-66b664fb5f06/documents/trace/trace.png) |
 
-> Screenshots are captured from a local run. See [docs/screenshots](docs/screenshots) —
-> if the folder is empty, the app hasn't been screenshotted on your machine yet.
+Sign-in screen: [auth.png](https://static.teamily.ai/sites/a36062a5-94f0-4879-bbed-66b664fb5f06/documents/auth/auth.png)
+
+The trace shot is the point of the whole project — five phases, each with the token
+accounting that phase actually produced (`998 → 0`, `998 → 249`, `249 → 157`).
 
 ## Live demo
 
