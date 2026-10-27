@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tafseel — Long-context reasoning</title>
+<meta name="description" content="Feed Tafseel a stack of long documents. It chunks, maps, reduces, and shows you the reasoning trace — with a guardrail layer that runs before anything is stored." />
+<meta name="theme-color" content="#0A0C11" />
+<style>
+  :root{
+    --ink:#0A0C11;
+    --ink-2:#0F1219;
+    --ink-3:#151923;
+    --line:#232936;
+    --line-soft:#1A1F2B;
+    --paper:#F4EFE6;
+    --paper-dim:#A8A294;
+    --muted:#7B8494;
+    --copper:#D98B4A;
+    --copper-soft:#E8A66B;
+    --sage:#6F9E7C;
+    --rust:#C2603F;
+    --blue:#5B87C4;
+    --radius:14px;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(900px 500px at 80% -10%, rgba(217,139,74,.09), transparent 70%),
+      radial-gradient(700px 400px at 0% 110%, rgba(91,135,196,.07), transparent 70%);
+    background-attachment:fixed;
+  }
+  ::selection{background:rgba(217,139,74,.3)}
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,textarea,select{font:inherit;color:inherit}
+  a{color:var(--copper-soft)}
+
+  /* ---------- shell ---------- */
+  .wrap{max-width:1180px;margin:0 auto;padding:0 18px}
+  header.top{
+    position:sticky;top:0;z-index:40;
+    backdrop-filter:blur(14px);
+    background:rgba(10,12,17,.82);
+    border-bottom:1px solid var(--line-soft);
+  }
+  .top-in{display:flex;align-items:center;gap:14px;height:62px}
+  .mark{
+    width:32px;height:32px;border-radius:9px;flex-shrink:0;
+    background:linear-gradient(150deg,var(--copper),#B4622C);
+    display:grid;place-items:center;
+    font-family:var(--serif);font-size:18px;font-weight:700;color:#170E06;
+    box-shadow:0 4px 16px rgba(217,139,74,.28);
+  }
+  .brand{font-family:var(--serif);font-size:19px;letter-spacing:.2px}
+  .brand small{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin-top:-4px}
+  .top-spacer{flex:1}
+  .pill{
+    font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:20px;
+    border:1px solid var(--line);color:var(--muted);white-space:nowrap;
+  }
+  .pill.ok{color:var(--sage);border-color:rgba(111,158,124,.35);background:rgba(111,158,124,.08)}
+  .pill.bad{color:var(--rust);border-color:rgba(194,96,63,.35);background:rgba(194,96,63,.08)}
+  .btn-ghost{
+    font-size:13px;padding:7px 13px;border-radius:9px;border:1px solid var(--line);
+    color:var(--paper-dim);transition:.16s;
+  }
+  .btn-ghost:hover{border-color:var(--copper);color:var(--paper)}
+
+  /* ---------- auth ---------- */
+  #authView{display:grid;place-items:center;min-height:calc(100vh - 62px);padding:32px 18px}
+  .card{
+    width:100%;max-width:420px;background:var(--ink-2);
+    border:1px solid var(--line);border-radius:var(--radius);
+    padding:30px 26px;box-shadow:0 24px 60px rgba(0,0,0,.5);
+  }
+  .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--copper);margin-bottom:9px}
+  h1.auth-title{font-family:var(--serif);font-size:27px;line-height:1.25;font-weight:600;margin-bottom:8px}
+  .auth-sub{font-size:13.5px;color:var(--muted);margin-bottom:22px;line-height:1.55}
+  label{display:block;font-size:12px;font-weight:600;letter-spacing:.3px;color:var(--paper-dim);margin-bottom:6px}
+  input[type=email],input[type=password],input[type=text]{
+    width:100%;padding:11px 13px;background:var(--ink-3);border:1px solid var(--line);
+    border-radius:9px;font-size:14px;transition:.16s;
+  }
+  input:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px rgba(217,139,74,.12)}
+  .field{margin-bottom:14px}
+  .btn-primary{
+    width:100%;padding:12px;border-radius:10px;font-weight:650;font-size:14px;
+    background:linear-gradient(160deg,var(--copper),#B4622C);color:#180E06;
+    transition:.16s;box-shadow:0 6px 20px rgba(217,139,74,.22);
+  }
+  .btn-primary:hover{filter:brightness(1.07)}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed;filter:none}
+  .switch{margin-top:16px;text-align:center;font-size:13px;color:var(--muted)}
+  .switch button{color:var(--copper-soft);font-weight:600}
+  .err{background:rgba(194,96,63,.1);border:1px solid rgba(194,96,63,.3);color:#E8A78F;
+    padding:10px 12px;border-radius:9px;font-size:12.5px;margin-bottom:14px;display:none}
+  .err.show{display:block}
+
+  /* ---------- app ---------- */
+  #appView{display:none;padding:22px 0 60px}
+  .cols{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+  @media(max-width:880px){.cols{grid-template-columns:1fr}}
+
+  .panel{background:var(--ink-2);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  .panel-h{
+    display:flex;align-items:center;gap:9px;padding:13px 16px;
+    border-bottom:1px solid var(--line-soft);background:rgba(255,255,255,.012);
+  }
+  .panel-h h2{font-size:12px;font-weight:700;letter-spacing:1.1px;text-transform:uppercase;color:var(--paper-dim)}
+  .panel-h .count{
+    font-family:var(--mono);font-size:10.5px;padding:2px 7px;border-radius:20px;
+    background:rgba(217,139,74,.13);color:var(--copper-soft);
+  }
+  .panel-body{padding:14px}
+
+  /* dropzone */
+  .drop{
+    border:1.5px dashed var(--line);border-radius:11px;padding:22px 14px;text-align:center;
+    transition:.16s;cursor:pointer;background:rgba(255,255,255,.008);
+  }
+  .drop:hover,.drop.over{border-color:var(--copper);background:rgba(217,139,74,.05)}
+  .drop .ico{font-size:20px;margin-bottom:6px;opacity:.75}
+  .drop .lbl{font-size:12.5px;color:var(--paper-dim);font-weight:600}
+  .drop .hint{font-size:11px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+
+  .doclist{margin-top:12px;display:flex;flex-direction:column;gap:7px;max-height:330px;overflow-y:auto}
+  .doc{
+    display:flex;gap:10px;align-items:flex-start;padding:10px 11px;border-radius:9px;
+    border:1px solid var(--line-soft);background:var(--ink-3);transition:.14s;cursor:pointer;
+  }
+  .doc:hover{border-color:var(--line)}
+  .doc.sel{border-color:rgba(217,139,74,.5);background:rgba(217,139,74,.06)}
+  .doc .chk{
+    width:15px;height:15px;border-radius:4px;border:1.5px solid var(--line);flex-shrink:0;
+    margin-top:2px;display:grid;place-items:center;font-size:10px;color:var(--ink);transition:.14s;
+  }
+  .doc.sel .chk{background:var(--copper);border-color:var(--copper)}
+  .doc .meta{min-width:0;flex:1}
+  .doc .t{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .doc .s{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+  .tag-red{color:var(--copper-soft)}
+  .empty{text-align:center;padding:20px 10px;color:var(--muted);font-size:12.5px}
+
+  /* composer */
+  .composer{display:flex;flex-direction:column;gap:10px}
+  textarea#question{
+    width:100%;min-height:84px;resize:vertical;padding:12px 13px;background:var(--ink-3);
+    border:1px solid var(--line);border-radius:10px;font-size:14px;line-height:1.55;
+  }
+  textarea#question:focus{outline:none;border-color:var(--copper);box-shadow:0 0 0 3px rgba(217,139,74,.12)}
+  .row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .btn-run{
+    padding:11px 22px;border-radius:10px;font-weight:650;font-size:13.5px;
+    background:linear-gradient(160deg,var(--copper),#B4622C);color:#180E06;
+    transition:.16s;box-shadow:0 6px 18px rgba(217,139,74,.2);
+  }
+  .btn-run:hover{filter:brightness(1.07)}
+  .btn-run:disabled{opacity:.5;cursor:not-allowed;filter:none;box-shadow:none}
+  .btn-sec{padding:10px 15px;border-radius:9px;border:1px solid var(--line);font-size:13px;color:var(--paper-dim)}
+  .btn-sec:hover{border-color:var(--copper);color:var(--paper)}
+  .hintline{font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+
+  /* result */
+  #result{margin-top:20px;display:none}
+  .summary{
+    font-family:var(--serif);font-size:16.5px;line-height:1.75;color:#EDE6D8;
+    padding:18px;background:linear-gradient(180deg,rgba(217,139,74,.055),transparent);
+    border-left:2.5px solid var(--copper);border-radius:0 10px 10px 0;
+  }
+  .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:10px;overflow:hidden;margin-top:14px}
+  .stat{background:var(--ink-2);padding:11px 12px}
+  .stat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted)}
+  .stat .v{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:3px;color:var(--copper-soft)}
+
+  /* trace */
+  .trace{margin-top:16px;display:flex;flex-direction:column;gap:0}
+  .step{position:relative;padding:0 0 16px 30px}
+  .step:last-child{padding-bottom:0}
+  .step::before{
+    content:"";position:absolute;left:8px;top:20px;bottom:0;width:1px;
+    background:linear-gradient(180deg,var(--line),transparent);
+  }
+  .step:last-child::before{display:none}
+  .step .dot{
+    position:absolute;left:0;top:5px;width:17px;height:17px;border-radius:50%;
+    background:var(--ink-3);border:1.5px solid var(--line);display:grid;place-items:center;
+    font-family:var(--mono);font-size:8.5px;color:var(--muted);font-weight:700;
+  }
+  .step.done .dot{border-color:var(--copper);color:var(--copper);background:rgba(217,139,74,.1)}
+  .step .ph{font-family:var(--mono);font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--copper);margin-bottom:3px}
+  .step .ti{font-size:13.5px;font-weight:650;margin-bottom:3px}
+  .step .dt{font-size:12.5px;color:var(--muted);line-height:1.6}
+  .step .tk{font-family:var(--mono);font-size:10px;color:var(--line);margin-top:4px}
+  .step .tk span{color:var(--paper-dim)}
+
+  /* safety strip */
+  .safety{margin-top:16px;border:1px solid rgba(111,158,124,.28);background:rgba(111,158,124,.055);border-radius:10px;padding:12px 14px}
+  .safety.warn{border-color:rgba(217,139,74,.35);background:rgba(217,139,74,.06)}
+  .safety.block{border-color:rgba(194,96,63,.4);background:rgba(194,96,63,.07)}
+  .safety .sh{display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--mono);letter-spacing:1.1px;text-transform:uppercase;font-weight:700;color:var(--sage)}
+  .safety.warn .sh{color:var(--copper-soft)}
+  .safety.block .sh{color:#E8A78F}
+  .safety .sb{font-size:12.5px;color:var(--paper-dim);margin-top:5px;line-height:1.55}
+
+  .spinner{display:inline-block;width:12px;height:12px;border:2px solid rgba(24,14,6,.35);border-top-color:#180E06;border-radius:50%;animation:sp .6s linear infinite;margin-right:7px;vertical-align:-1px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--ink-3);border:1px solid var(--line);border-radius:10px;
+    padding:11px 17px;font-size:13px;box-shadow:0 16px 40px rgba(0,0,0,.55);
+    opacity:0;transition:.22s;pointer-events:none;z-index:80;max-width:90vw;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.bad{border-color:rgba(194,96,63,.45);color:#E8A78F}
+  .foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line-soft);
+    display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap top-in">
+    <div class="mark">ت</div>
+    <div class="brand">Tafseel<small>long-context reasoning</small></div>
+    <div class="top-spacer"></div>
+    <span class="pill" id="healthPill">checking…</span>
+    <span class="pill" id="userPill" style="display:none"></span>
+    <button class="btn-ghost" id="logoutBtn" style="display:none">Sign out</button>
+  </div>
+</header>
+
+<!-- ============ AUTH ============ -->
+<main id="authView">
+  <div class="card">
+    <div class="eyebrow">Day 3 · Tafseel</div>
+    <h1 class="auth-title" id="authTitle">Read a hundred pages,<br/>ask one question.</h1>
+    <p class="auth-sub" id="authSub">Tafseel splits your documents into overlapping chunks, summarises each one separately, then merges the results — so length stops being the limit. You see every step it took.</p>
+    <div class="err" id="authErr"></div>
+    <form id="authForm" autocomplete="on">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" required placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" required minlength="8" placeholder="At least 8 characters" autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn-primary" id="authBtn">Create account</button>
+    </form>
+    <div class="switch">
+      <span id="switchText">Already have an account?</span>
+      <button id="switchBtn">Sign in</button>
+    </div>
+  </div>
+</main>
+
+<!-- ============ APP ============ -->
+<main id="appView">
+  <div class="wrap">
+    <div class="cols">
+
+      <!-- left: vault -->
+      <section class="panel">
+        <div class="panel-h">
+          <h2>Document vault</h2>
+          <span class="count" id="docCount">0</span>
+        </div>
+        <div class="panel-body">
+          <div class="drop" id="drop">
+            <div class="ico">⌁</div>
+            <div class="lbl">Drop a file, or click</div>
+            <div class="hint">pdf · txt · md · csv · json</div>
+          </div>
+          <input type="file" id="fileInput" hidden accept=".pdf,.txt,.md,.csv,.json,.log" />
+          <div class="doclist" id="docList">
+            <div class="empty">No documents yet.<br/>Upload one to get started.</div>
+          </div>
+          <button class="btn-sec" id="pasteBtn" style="width:100%;margin-top:11px">Paste text instead</button>
+          <div id="pasteBox" style="display:none;margin-top:11px">
+            <input type="text" id="pasteTitle" placeholder="Title" style="margin-bottom:7px" />
+            <textarea id="pasteBody" placeholder="Paste your document here…" style="width:100%;min-height:120px;padding:10px;background:var(--ink-3);border:1px solid var(--line);border-radius:9px;font-size:13px;resize:vertical"></textarea>
+            <button class="btn-run" id="pasteSave" style="width:100%;margin-top:7px">Add document</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- right: workspace -->
+      <div>
+        <section class="panel">
+          <div class="panel-h">
+            <h2>Ask across everything</h2>
+            <span class="count" id="selCount">0 selected</span>
+          </div>
+          <div class="panel-body">
+            <div class="composer">
+              <textarea id="question" placeholder="What changed between these two contracts? Summarise the findings across all reports…"></textarea>
+              <div class="row">
+                <button class="btn-run" id="runBtn">Run analysis</button>
+                <span class="hintline" id="runHint">Pick at least one document</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="result">
+          <div class="panel">
+            <div class="panel-h"><h2>Reduced summary</h2></div>
+            <div class="panel-body">
+              <div class="summary" id="summaryText"></div>
+              <div class="statgrid" id="stats"></div>
+              <div id="safetyBox"></div>
+              <div style="margin-top:20px">
+                <div class="eyebrow" style="margin-bottom:10px">Reasoning trace</div>
+                <div class="trace" id="trace"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+    </div>
+    <div class="foot">
+      <span>Tafseel v1.0.0 · deterministic · no external model calls</span>
+      <span>map → reduce → trace</span>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var API = "";
+  var state = { token: localStorage.getItem("tafseel_token"), docs: [], selected: new Set(), mode: "register" };
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  function toast(msg, bad){
+    var t = $("toast");
+    t.textContent = msg;
+    t.className = "toast show" + (bad ? " bad" : "");
+    clearTimeout(t._t);
+    t._t = setTimeout(function(){ t.className = "toast"; }, 3400);
+  }
+
+  function api(path, opts){
+    opts = opts || {};
+    var headers = opts.headers || {};
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    if (opts.body && !(opts.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(opts.body);
+    }
+    opts.headers = headers;
+    return fetch(API + path, opts).then(function(res){
+      return res.text().then(function(txt){
+        var data = null;
+        try { data = txt ? JSON.parse(txt) : null; } catch(e) { data = { detail: txt }; }
+        if (!res.ok) {
+          var msg = (data && data.detail) ? data.detail : ("HTTP " + res.status);
+          if (Array.isArray(msg)) msg = msg.map(function(m){ return m.msg || JSON.stringify(m); }).join(", ");
+          throw new Error(msg);
+        }
+        return data;
+      });
+    });
+  }
+
+  // ---------- health ----------
+  function health(){
+    fetch(API + "/api/health").then(function(r){ return r.json(); }).then(function(d){
+      var p = $("healthPill");
+      p.textContent = d.status === "ok" ? "api ok" : "degraded";
+      p.className = "pill " + (d.status === "ok" ? "ok" : "bad");
+    }).catch(function(){
+      var p = $("healthPill");
+      p.textContent = "offline"; p.className = "pill bad";
+    });
+  }
+
+  // ---------- auth ----------
+  $("switchBtn").addEventListener("click", function(){
+    state.mode = state.mode === "register" ? "login" : "register";
+    var reg = state.mode === "register";
+    $("authTitle").innerHTML = reg ? "Read a hundred pages,<br/>ask one question." : "Welcome back.";
+    $("authSub").textContent = reg
+      ? "Tafseel splits your documents into overlapping chunks, summarises each one separately, then merges the results — so length stops being the limit. You see every step it took."
+      : "Sign in to pick up where you left off. Your documents and past analyses are waiting.";
+    $("authBtn").textContent = reg ? "Create account" : "Sign in";
+    $("switchText").textContent = reg ? "Already have an account?" : "New here?";
+    $("switchBtn").textContent = reg ? "Sign in" : "Create an account";
+    $("password").setAttribute("autocomplete", reg ? "new-password" : "current-password");
+    $("authErr").className = "err";
+  });
+
+  $("authForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var btn = $("authBtn");
+    var errBox = $("authErr");
+    errBox.className = "err";
+    btn.disabled = true;
+    var original = btn.textContent;
+    btn.innerHTML = '<span class="spinner"></span>Working…';
+
+    api("/api/auth/" + state.mode, {
+      method: "POST",
+      body: { email: $("email").value.trim(), password: $("password").value }
+    }).then(function(d){
+      state.token = d.access_token;
+      localStorage.setItem("tafseel_token", d.access_token);
+      enterApp();
+    }).catch(function(err){
+      errBox.textContent = err.message;
+      errBox.className = "err show";
+    }).finally(function(){
+      btn.disabled = false;
+      btn.textContent = original;
+    });
+  });
+
+  function logout(){
+    state.token = null;
+    state.docs = [];
+    state.selected.clear();
+    localStorage.removeItem("tafseel_token");
+    $("authView").style.display = "grid";
+    $("appView").style.display = "none";
+    $("userPill").style.display = "none";
+    $("logoutBtn").style.display = "none";
+  }
+  $("logoutBtn").addEventListener("click", logout);
+
+  function enterApp(){
+    api("/api/auth/me").then(function(u){
+      $("authView").style.display = "none";
+      $("appView").style.display = "block";
+      $("userPill").style.display = "inline-block";
+      $("userPill").textContent = u.email.split("@")[0];
+      $("logoutBtn").style.display = "inline-block";
+      loadDocs();
+    }).catch(function(){
+      logout();
+    });
+  }
+
+  // ---------- documents ----------
+  function loadDocs(){
+    api("/api/documents").then(function(docs){
+      state.docs = docs;
+      state.selected.forEach(function(id){
+        if (!docs.some(function(d){ return d.id === id; })) state.selected.delete(id);
+      });
+      renderDocs();
+    }).catch(function(err){ toast(err.message, true); });
+  }
+
+  function renderDocs(){
+    var list = $("docList");
+    $("docCount").textContent = state.docs.length;
+    if (!state.docs.length) {
+      list.innerHTML = '<div class="empty">No documents yet.<br/>Upload one to get started.</div>';
+      updateSel();
+      return;
+    }
+    list.innerHTML = "";
+    state.docs.forEach(function(d){
+      var el = document.createElement("div");
+      el.className = "doc" + (state.selected.has(d.id) ? " sel" : "");
+      var badge = d.redaction_count > 0
+        ? ' · <span class="tag-red">' + d.redaction_count + ' redacted</span>' : '';
+      el.innerHTML =
+        '<div class="chk">' + (state.selected.has(d.id) ? "✓" : "") + '</div>' +
+        '<div class="meta">' +
+          '<div class="t"></div>' +
+          '<div class="s">' + d.source_type + ' · ' + d.chunk_count + ' chunks · ' +
+            (d.token_estimate >= 1000 ? (d.token_estimate/1000).toFixed(1) + "k" : d.token_estimate) +
+            ' tok' + badge + '</div>' +
+        '</div>';
+      el.querySelector(".t").textContent = d.title;
+      el.addEventListener("click", function(){
+        if (state.selected.has(d.id)) state.selected.delete(d.id);
+        else state.selected.add(d.id);
+        renderDocs();
+      });
+      list.appendChild(el);
+    });
+    updateSel();
+  }
+
+  function updateSel(){
+    var n = state.selected.size;
+    $("selCount").textContent = n + " selected";
+    $("runHint").textContent = n ? "Ready · " + n + " document(s)" : "Pick at least one document";
+    $("runBtn").disabled = n === 0;
+  }
+
+  function uploadFile(file){
+    var fd = new FormData();
+    fd.append("file", file);
+    toast("Uploading " + file.name + "…");
+    api("/api/documents/upload", { method: "POST", body: fd })
+      .then(function(d){
+        toast("Added " + d.title + " · " + d.chunk_count + " chunks");
+        loadDocs();
+      })
+      .catch(function(err){ toast(err.message, true); });
+  }
+
+  var drop = $("drop");
+  drop.addEventListener("click", function(){ $("fileInput").click(); });
+  $("fileInput").addEventListener("change", function(e){
+    if (e.target.files.length) uploadFile(e.target.files[0]);
+    e.target.value = "";
+  });
+  ["dragenter","dragover"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("over"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("over"); });
+  });
+  drop.addEventListener("drop", function(e){
+    if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+  });
+
+  $("pasteBtn").addEventListener("click", function(){
+    var b = $("pasteBox");
+    b.style.display = b.style.display === "none" ? "block" : "none";
+  });
+  $("pasteSave").addEventListener("click", function(){
+    var title = $("pasteTitle").value.trim() || "Untitled";
+    var body = $("pasteBody").value;
+    if (!body.trim()) { toast("Paste some text first", true); return; }
+    api("/api/documents", { method: "POST", body: { title: title, content: body } })
+      .then(function(d){
+        toast("Added " + d.title);
+        $("pasteTitle").value = ""; $("pasteBody").value = "";
+        $("pasteBox").style.display = "none";
+        loadDocs();
+      })
+      .catch(function(err){ toast(err.message, true); });
+  });
+
+  // ---------- analysis ----------
+  $("runBtn").addEventListener("click", function(){
+    var q = $("question").value.trim();
+    if (q.length < 3) { toast("Write a question first", true); return; }
+    var btn = $("runBtn");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Reasoning…';
+
+    api("/api/analysis", {
+      method: "POST",
+      body: { question: q, document_ids: Array.from(state.selected) }
+    }).then(function(a){
+      renderResult(a);
+      $("result").style.display = "block";
+      $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+    }).catch(function(err){
+      toast(err.message, true);
+    }).finally(function(){
+      btn.disabled = state.selected.size === 0;
+      btn.textContent = "Run analysis";
+    });
+  });
+
+  function fmt(n){
+    if (n >= 1000000) return (n/1000000).toFixed(1) + "M";
+    if (n >= 1000) return (n/1000).toFixed(1) + "k";
+    return String(n);
+  }
+
+  function renderResult(a){
+    $("summaryText").textContent = a.summary || "Nothing in these documents matched that question.";
+
+    var pct = Math.round(a.compression_ratio * 100);
+    $("stats").innerHTML = [
+      ["docs", a.document_count],
+      ["chunks", a.chunk_count],
+      ["in", fmt(a.tokens_in)],
+      ["out", fmt(a.tokens_out)],
+      ["saved", pct + "%"],
+      ["took", a.duration_ms + "ms"]
+    ].map(function(p){
+      return '<div class="stat"><div class="k">' + p[0] + '</div><div class="v">' + p[1] + '</div></div>';
+    }).join("");
+
+    var v = a.safety_verdict;
+    var cls = v === "refuse" ? "block" : (v === "redact" ? "warn" : "");
+    var label = v === "refuse" ? "blocked" : (v === "redact" ? "sanitised" : "clear");
+    $("safetyBox").innerHTML =
+      '<div class="safety ' + cls + '">' +
+        '<div class="sh">◈ guardrail · ' + label + '</div>' +
+        '<div class="sb">' + (v === "redact"
+          ? "Personal data was removed from your question before it was processed. The original was never sent anywhere."
+          : "No policy issues found in the question. Nothing was redacted.") + '</div>' +
+      '</div>';
+
+    var trace = $("trace");
+    trace.innerHTML = "";
+    (a.steps || []).forEach(function(s, i){
+      var el = document.createElement("div");
+      el.className = "step done";
+      el.innerHTML =
+        '<div class="dot">' + (i+1) + '</div>' +
+        '<div class="ph"></div>' +
+        '<div class="ti"></div>' +
+        '<div class="dt"></div>' +
+        '<div class="tk"></div>';
+      el.querySelector(".ph").textContent = s.phase;
+      el.querySelector(".ti").textContent = s.title;
+      el.querySelector(".dt").textContent = s.detail;
+      if (s.tokens_in || s.tokens_out) {
+        el.querySelector(".tk").innerHTML =
+          'tokens <span>' + fmt(s.tokens_in) + ' → ' + fmt(s.tokens_out) + '</span>';
+      }
+      trace.appendChild(el);
+    });
+  }
+
+  // ---------- boot ----------
+  health();
+  if (state.token) enterApp();
+})();
+</script>
+</body>
+</html>
